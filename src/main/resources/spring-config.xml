@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context-3.0.xsd
+      http://www.springframework.org/schema/aop
+          http://www.springframework.org/schema/aop/spring-aop-3.0.xsd">
+    <bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="location" value="classpath:jdbc.properties"/>
+    </bean>
+    
+    <bean id="ds_master" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
+		<property name="url" value="${ds.master.url}${ds.master.schema}" />
+		<property name="username" value="${ds.master.username}" />
+		<property name="password" value="${ds.master.password}" />
+		<property name="initialSize" value="${ds.master.pool.initialSize}" />
+		<property name="minIdle" value="${ds.master.pool.minIdle}" />
+		<property name="maxActive" value="${ds.master.pool.maxActive}" />
+		<property name="maxWait" value="10000" />
+		<property name="timeBetweenEvictionRunsMillis" value="60000" />
+		<property name="minEvictableIdleTimeMillis" value="300000" />
+		<property name="validationQuery" value="SELECT 'x'" />
+		<property name="testWhileIdle" value="true" />
+		<property name="testOnBorrow" value="false" />
+		<property name="testOnReturn" value="false" />
+	</bean>
+    
+    
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="ds_master"/>
+    </bean>
+
+    <!-- mybatis.spring自动映射 -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.acewill.dbsync.dao"/>
+    </bean>
+
+    <!-- 自动扫描，多个包以 逗号分隔 -->
+    <context:component-scan base-package="com.acewill.dbsync"/>
+    <aop:aspectj-autoproxy/>
+</beans>

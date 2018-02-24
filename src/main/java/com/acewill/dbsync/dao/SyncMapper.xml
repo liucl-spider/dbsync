@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.acewill.dbsync.dao.SyncMapper" >
+	
+	<resultMap id="SqlColumnResultMap" type="com.acewill.dbsync.entity.SqlColumn" >
+		<result column="TABLE_CATALOG" property="tableCatalog" jdbcType="VARCHAR" />
+		<result column="TABLE_SCHEMA" property="tableSchema" jdbcType="VARCHAR" />
+		<result column="TABLE_NAME" property="tableName" jdbcType="VARCHAR" />
+		<result column="COLUMN_NAME" property="columnName" jdbcType="VARCHAR" />
+		<result column="ORDINAL_POSITION" property="ordinalPosition" jdbcType="INTEGER" />
+		<result column="COLUMN_DEFAULT" property="columnDefault" jdbcType="VARCHAR" />
+		<result column="IS_NULLABLE" property="isNullable" jdbcType="VARCHAR" />
+		<result column="DATA_TYPE" property="dataType" jdbcType="VARCHAR" />
+		<result column="CHARACTER_MAXIMUM_LENGTH" property="characterLength" jdbcType="INTEGER" />
+		<result column="COLUMN_TYPE" property="columnType" jdbcType="VARCHAR" />
+		<result column="EXTRA" property="extra" jdbcType="VARCHAR" />
+		<result column="COLUMN_COMMENT" property="columnComment" jdbcType="VARCHAR" />
+	</resultMap>
+	<!--以从数据库为主，查询 主数据库 缺失的 表 名称列表-->
+	<select id="selectUnExistTableNameList" parameterType="com.acewill.dbsync.entity.SyncSchema" resultType="string">
+		SELECT table_name
+			FROM information_schema.TABLES 
+			WHERE TABLE_SCHEMA=#{masterSchema} AND TABLE_NAME NOT IN
+			(SELECT b.TABLE_NAME FROM information_schema.TABLES b WHERE b.TABLE_SCHEMA=#{slaveSchema})
+	</select>
+	
+	<select id="selectAllTable" parameterType="string" resultType="java.util.Map">
+		SELECT table_name, table_comment
+			FROM information_schema.TABLES 
+			WHERE TABLE_SCHEMA=#{masterSchema}
+	</select>
+	
+	<select id="selectTableTrigger" parameterType="java.util.Map" resultType="string">
+		SELECT TRIGGER_NAME FROM `INFORMATION_SCHEMA`.`TRIGGERS` 
+		WHERE TRIGGER_SCHEMA= #{tableSchema} 
+		AND EVENT_OBJECT_TABLE=#{tableName}
+	</select>
+	
+	<!--查询某个数据库的所有触发器名称-->
+	<select id="selectAllTrigger" parameterType="string" resultType="string">
+		SELECT TRIGGER_NAME FROM `INFORMATION_SCHEMA`.`TRIGGERS` WHERE TRIGGER_SCHEMA= #{value}
+	</select>
+	
+	<!--查询某个数据库的所有方法名称-->
+	<select id="selectAllFunction" parameterType="string" resultType="string">
+		SELECT ROUTINE_NAME FROM `INFORMATION_SCHEMA`.`ROUTINES` WHERE `ROUTINE_SCHEMA` = #{value} AND ROUTINE_TYPE = 'FUNCTION'  order by LENGTH(ROUTINE_NAME) asc
+	</select>
+	
+	<!--查询某个数据库的所有存储过程名称-->
+	<select id="selectAllProcedure" parameterType="string" resultType="string">
+		SELECT ROUTINE_NAME FROM `INFORMATION_SCHEMA`.`ROUTINES` WHERE `ROUTINE_SCHEMA` = #{value} AND ROUTINE_TYPE = 'PROCEDURE'
+	</select>
+	
+	<!--查询 创建sql对象 的语句-->
+	<select id="selectCreateSqlObj" parameterType="com.acewill.dbsync.entity.SqlObject" resultType="map">
+		SHOW CREATE ${sqlObjType} ${schema}.${sqlObjName}
+	</select>
+	<!--执行创建sql对象 语句-->
+	<update id="runCreateSql" parameterType="string">
+		${sql}
+	</update>
+	<!--查询不存在的列-->
+	<select id="selectUnExistColumns" parameterType="com.acewill.dbsync.entity.SyncSchema" resultMap="SqlColumnResultMap">
+		SELECT *
+			FROM information_schema.`COLUMNS` a 
+			WHERE a.TABLE_SCHEMA=#{masterSchema} AND a.COLUMN_NAME NOT IN
+			(SELECT b.COLUMN_NAME FROM information_schema.`COLUMNS` b 
+				WHERE b.TABLE_SCHEMA=#{slaveSchema}
+				AND a.TABLE_SCHEMA=#{masterSchema}
+				AND a.TABLE_NAME=b.TABLE_NAME )
+	</select>
+	
+	<!--查询所有列名称相同的列  列表，做对比-->
+	<select id="selectChangedColumns" parameterType="com.acewill.dbsync.entity.SyncSchema" resultType="com.acewill.dbsync.entity.SqlColumnSchema" >
+		SELECT a.TABLE_SCHEMA AS `master.tableSchema`,
+				a.TABLE_NAME AS `master.tableName`,
+				a.COLUMN_NAME AS `master.columnName`,
+				a.COLUMN_TYPE AS `master.columnType`,
+				a.IS_NULLABLE AS `master.isNullable`,
+				a.COLUMN_DEFAULT AS `master.columnDefault`,
+				a.EXTRA AS `master.extra`,
+				a.COLUMN_COMMENT AS `master.columnComment`,
+				b.TABLE_SCHEMA AS `slave.tableSchema`,
+				b.TABLE_NAME AS `slave.tableName`,
+				b.COLUMN_NAME AS `slave.columnName`,
+				b.COLUMN_TYPE AS `slave.columnType`,
+				b.IS_NULLABLE AS `slave.isNullable`,
+				b.COLUMN_DEFAULT AS `slave.columnDefault`,
+				b.EXTRA AS `slave.extra`,
+				b.COLUMN_COMMENT AS `slave.columnComment`
+			FROM information_schema.`COLUMNS` a 
+			INNER JOIN information_schema.`COLUMNS` b 
+			ON a.TABLE_SCHEMA=#{masterSchema}
+			AND b.TABLE_SCHEMA=#{slaveSchema}
+			AND a.TABLE_NAME=b.TABLE_NAME 
+			AND a.COLUMN_NAME=b.COLUMN_NAME 
+	</select>
+	
+	<!--查询所有列-->
+	<select id="selectAllColumns" parameterType="string" resultMap="SqlColumnResultMap" >
+		SELECT a.TABLE_SCHEMA ,
+				a.TABLE_NAME ,
+				a.COLUMN_NAME ,
+				a.ORDINAL_POSITION,
+				a.DATA_TYPE,
+				a.COLUMN_TYPE ,
+				a.IS_NULLABLE ,
+				a.COLUMN_DEFAULT ,
+				a.EXTRA ,
+				a.COLUMN_COMMENT 
+			FROM information_schema.`COLUMNS` a 
+			WHERE a.TABLE_SCHEMA=#{value}
+	</select>
+	
+	
+	<select id="selectColumnHasData" parameterType="com.acewill.dbsync.entity.SqlColumn" resultType="int">
+		SELECT COUNT(*) FROM `${tableSchema}`.`${tableName}` WHERE `${columnName}` IS NOT NULL
+	</select>
+	
+	<select id="selectAllIndexs" parameterType="string" resultType="com.acewill.dbsync.entity.SqlIndex">
+		SELECT
+			TABLE_SCHEMA,
+		    TABLE_NAME,
+		    NON_UNIQUE,
+		    INDEX_NAME,
+		    SEQ_IN_INDEX,
+		    COLUMN_NAME
+	    FROM information_schema.`STATISTICS`
+	    WHERE table_schema=#{value}
+	    ORDER BY table_name, index_name, seq_in_index ASC
+	</select>
+	
+	<resultMap id="CodeDefintionResultMap" type="com.acewill.dbsync.entity.CodeDefintion" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="defintionCode" property="defintionCode" jdbcType="VARCHAR" />
+	    <result column="difintionName" property="difintionName" jdbcType="VARCHAR" />
+	    <result column="parentID" property="parentID" jdbcType="INTEGER" />
+	    <result column="viewType" property="viewType" jdbcType="VARCHAR" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	  </resultMap>
+  
+	<select id="selectUnExistCodeDefinaList" parameterType="com.acewill.dbsync.entity.SyncSchema" 
+			resultMap="CodeDefintionResultMap">
+		SELECT * FROM ${masterSchema}.`codedefintion` A 
+			LEFT JOIN ${slaveSchema}.`codedefintion` B 
+			ON A.`defintionCode` = B.`defintionCode` 
+			WHERE B.id IS NULL
+	</select>
+	
+	<resultMap id="CodeContentResultMap" type="com.acewill.dbsync.entity.CodeContent" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="codeName" property="codeName" jdbcType="VARCHAR" />
+	    <result column="code" property="code" jdbcType="VARCHAR" />
+	    <result column="difintionID" property="difintionID" jdbcType="INTEGER" />
+	    <result column="orderNum" property="orderNum" jdbcType="INTEGER" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	    <result column="flag" property="flag" jdbcType="TINYINT" />
+	    <result column="defintionCode" property="defintionCode" jdbcType="VARCHAR" />
+	  </resultMap>
+  
+	<select id="selectUnExistCodeContentList" parameterType="com.acewill.dbsync.entity.SyncSchema" 
+			resultMap="CodeContentResultMap">
+		SELECT A.*,C.defintionCode FROM ${masterSchema}.`codecontent` A 
+			LEFT JOIN ${slaveSchema}.`codecontent` B 
+			ON A.`code` = B.`code` 
+			LEFT JOIN ${masterSchema}.codedefintion C
+			ON A.difintionID = C.ID
+			WHERE B.id IS NULL
+			AND A.flag = 1
+	</select>
+	
+	<resultMap id="ButtonResultMap" type="com.acewill.dbsync.entity.Button" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="btnName" property="btnName" jdbcType="VARCHAR" />
+	    <result column="btnCode" property="btnCode" jdbcType="VARCHAR" />
+	    <result column="btnPageID" property="btnPageID" jdbcType="INTEGER" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	    <result column="pageName" property="pageName" jdbcType="VARCHAR" />
+	  </resultMap>
+  
+	<select id="selectAllButton" parameterType="string"
+			resultMap="ButtonResultMap">
+		SELECT A.*, B.pageName FROM ${value}.button A LEFT JOIN ${value}.btnpage B ON A.btnPageID = B.ID
+	</select>
+	
+	<resultMap id="CardResultMap" type="com.acewill.dbsync.entity.Card" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="name" property="name" jdbcType="VARCHAR" />
+	    <result column="type" property="type" jdbcType="VARCHAR" />
+	    <result column="alias" property="alias" jdbcType="VARCHAR" />
+	    <result column="info" property="info" jdbcType="VARCHAR" />
+	    <result column="url" property="url" jdbcType="VARCHAR" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	  </resultMap>
+	
+	<select id="selectAllCard" parameterType="string"
+			resultMap="CardResultMap">
+		SELECT A.* FROM ${value}.card A
+	</select>
+	
+	<resultMap id="CardDetailResultMap" type="com.acewill.dbsync.entity.CardDetail" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="name" property="name" jdbcType="VARCHAR" />
+	    <result column="alias" property="alias" jdbcType="VARCHAR" />
+	    <result column="info" property="info" jdbcType="VARCHAR" />
+	    <result column="ctrl" property="ctrl" jdbcType="VARCHAR" />
+	    <result column="cardID" property="cardID" jdbcType="INTEGER" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	    <result column="cardName" property="cardName" jdbcType="VARCHAR" />
+	  </resultMap>
+	
+	<select id="selectAllCardDetail" parameterType="string"
+			resultMap="CardDetailResultMap">
+		SELECT A.*, B.name as cardName FROM ${value}.card_detail A LEFT JOIN ${value}.card B ON A.cardID = B.ID
+	</select>
+	
+	
+	
+	<resultMap id="BtnPageResultMap" type="com.acewill.dbsync.entity.BtnPage" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="moduleID" property="moduleID" jdbcType="INTEGER" />
+	    <result column="pageName" property="pageName" jdbcType="VARCHAR" />
+	    <result column="pageCode" property="pageCode" jdbcType="VARCHAR" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	    <result column="moduleName" property="moduleName" jdbcType="VARCHAR" />
+	  </resultMap>
+	<select id="selectAllBtnPage" parameterType="string"
+			resultMap="BtnPageResultMap">
+		SELECT A.*, B.moduleName FROM ${value}.btnpage A LEFT JOIN sysmodule B on A.moduleID = B.ID
+	</select>
+	
+	<resultMap id="SysMenuResultMap" type="com.acewill.dbsync.entity.SysMenu" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="moduleID" property="moduleID" jdbcType="INTEGER" />
+	    <result column="menuName" property="menuName" jdbcType="VARCHAR" />
+	    <result column="parentID" property="parentID" jdbcType="INTEGER" />
+	    <result column="imagUrl" property="imagUrl" jdbcType="VARCHAR" />
+	    <result column="orderNum" property="orderNum" jdbcType="INTEGER" />
+	    <result column="url" property="url" jdbcType="VARCHAR" />
+	    <result column="isLeft" property="isLeft" jdbcType="INTEGER" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	    <result column="moduleName" property="moduleName" jdbcType="VARCHAR" />
+	  </resultMap>
+	<select id="selectAllSysMenu" parameterType="string"
+			resultMap="SysMenuResultMap">
+		SELECT A.*, B.moduleName FROM ${value}.sysmenu A LEFT JOIN sysmodule B on A.moduleID = B.ID
+	</select>
+	
+	<resultMap id="SysModuleResultMap" type="com.acewill.dbsync.entity.SysModule" >
+	    <id column="ID" property="ID" jdbcType="INTEGER" />
+	    <result column="moduleName" property="moduleName" jdbcType="VARCHAR" />
+	    <result column="createTime" property="createTime" jdbcType="TIMESTAMP" />
+	    <result column="des" property="des" jdbcType="VARCHAR" />
+	    <result column="valid" property="valid" jdbcType="TINYINT" />
+	  </resultMap>
+	<select id="selectAllSysModule" parameterType="string"
+			resultMap="SysModuleResultMap">
+		SELECT * FROM ${value}.sysmodule
+	</select>
+	
+</mapper>
